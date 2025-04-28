@@ -176,6 +176,7 @@ cython_debug/
 .pypirc
 
 # Corpora and artifacts
+!data/
 data/models/
 data/train_dfs/
 data/original_corpora/cglu/German/*
