@@ -21,8 +21,8 @@ This package is not available on PyPI. To install:
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/your-repo-name.git
-   cd your-repo-name
+   git clone https://github.com/joshramanathan/surprisal_llm_adaptation.git
+   cd surprisal_llm_adaptation
    ```
 2. Install the required dependencies:
    ```
@@ -53,6 +53,8 @@ Some corpora used for model adaptation are not included in this repository due t
 
 - **MECO**: The Multilingual Eye-movement Corpus (L2 release 2.0) is available [here](https://osf.io/q9h43/).
     - Download the entire `release 2.0` folder and place it in `data/original_corpora/meco/`.
+
+Additionally, if desired, the `models` directory created as an artifact from this experiment can be downloaded from the associated OSF page [here](https://osf.io/n6ebg/), and placed in `data`.
 
 ---
 
