@@ -1,0 +1,6 @@
+pandas
+transformers
+datasets
+openpyxl
+torch
+accelerate
