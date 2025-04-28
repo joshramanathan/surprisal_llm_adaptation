@@ -460,6 +460,9 @@ class ExperimentRunner(object):
 
 
     def get_regression_df(self) -> None:
+        """
+        Not yet implemented.
+        """
         for l1 in self.l1s:
             # Collect average reading times (firstrun.dur) from MECO (joint_data_trimmed_L2_wave2_2025_01_03.rda)
             # Collect surprisal values from respective model
@@ -469,6 +472,9 @@ class ExperimentRunner(object):
 
 
     def fit_regression_model(self) -> None:
+        """
+        Not yet implemented.
+        """
         pass
 
 
