@@ -64,7 +64,7 @@ Additionally, if desired, the `models` directory created as an artifact from thi
 
 **`data/`**
 
-Directory containing all corpora and generated data.
+Directory containing all corpora and generated data. This may be named anything, but is `data` by default.
 
 - `original_corpora/` The directory in which downloaded corpora must be placed (as described above).
   - `cglu/`
@@ -103,8 +103,8 @@ import surprisal_llm_adaptation
 
 runner = surprisal_llm_adaptation.ExperimentRunner(model_id="EleutherAI/pythia-1.4b")
 ```
-You may replace `model_id` with any HuggingFace model identifier for an autoregressive language model (e.g., GPT-2, Pythia models).
-Optionally, you can also specify a different `data_dir` path.
+You may replace `model_id` with any HuggingFace model identifier for an autoregressive language model (e.g., GPT-2, Pythia).
+Optionally, you can also specify a different `data_dir` path, but the new `data_dir` must be organized as described in [Directory Structure](#directory-structure).
 
 To begin adaptation and evaluation:
 
@@ -123,8 +123,16 @@ runner.get_regression_df()
 runner.fit_regression_model()
 ```
 
-`adapt_models()` is the only method that may be passed parameters.  
-It is highly recommended to adjust at least `num_proc` and `batch_size` according to your machine's capabilities.   The default for both is `1`, which will likely be too slow for most users.
+NOTE: `full_pipeline()` and `adapt_models()` may optionally be passed the following parameters:
+
+- **num_proc** (`int`, _optional_) - The number of processes (CPUs) to use in parallel during processing. Defaults to 1.
+- **batch_size** (`int`, _optional_) - The number of samples to be processed together during tokenization, and the amount to be processed at once each step of training (before updating weights). Defaults to 1.
+- **block_size** (`int`, _optional_) - The number of tokens in a single block to be given to the model. Defaults to 128.
+
+It is _highly_ recommended to adjust `num_proc` and `batch_size` according to your machine's capabilities.
+The default for both is `1`, which will likely be too slow for most users.
+
+Additionally, changing the `block_size` will change the way the models are trained. Depending on the value, the experiment may result differently.
 
 ---
 
