@@ -4,6 +4,7 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer
 from datasets import Dataset
 import torch
+import pyreadr
 
 class ExperimentRunner(object):
     """
@@ -11,7 +12,7 @@ class ExperimentRunner(object):
     This class handles the entire pipeline of:
     1. Processing and combining EFCAMDAT and CGLU learner corpora
     2. Adapting language models for different L1 backgrounds
-    3. Calculating surprisal values
+    3. Estimating surprisal values
     4. Running regression analyses on reading times
     The pipeline processes data for 6 L1 languages: German, Italian, Mandarin, Portuguese, Russian, and Turkish.
     Attributes:
@@ -65,6 +66,8 @@ class ExperimentRunner(object):
         # Minimum word count (for Turkish) to ensure equal amounts of data
         self._MIN_WORDCOUNT = 126824
 
+        # 
+
 
     def _assert_file_exists(self, file_path: str, error_message: str):
         """
@@ -78,7 +81,7 @@ class ExperimentRunner(object):
         """
         if not os.path.exists(file_path):
             raise FileNotFoundError(error_message)
-        
+
 
     def _combine_dfs(self, df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
         """
@@ -197,7 +200,7 @@ class ExperimentRunner(object):
             output_dir (str): Directory path where the new model will be saved.
             batch_size (int, optional): The batch size to use for training. Default = 1
         """
-        
+
         # Set arguments for training
         training_args = TrainingArguments(output_dir=output_dir,
                                           num_train_epochs=2,
@@ -324,7 +327,7 @@ class ExperimentRunner(object):
         process and combines them by language, and saves them as feather files.
         Raises:
             FileNotFoundError: If the EFCAMDAT cleaned subcorpus file or required L1 dataframes
-                              are not found in the expected locations.
+                               are not found in the expected locations.
         """
 
         # Check if all necessary data already exists and if so, return it
@@ -430,9 +433,11 @@ class ExperimentRunner(object):
         At the end, the adapted models are saved to `models` folder.
 
         Args:
-            num_proc (int, optional): The number of processes to use for parallelization. Default = 1
-            batch_size (int, optional): The batch size to use for training. Default = 1
-            block_size (int, optional): The size of blocks to group texts into. Default = 128
+            num_proc (int, optional): The number of processes (CPUs) to use in parallel during processing. Defaults to 1.
+            batch_size (int, optional): The number of samples to be processed together during tokenization,
+                                        and the amount to be processed at once each step of training
+                                        (before updating weights). Defaults to 1.
+            block_size (int, optional): The number of tokens in a single block to be given to the model. Defaults to 128.
         """
 
         # Initialize the tokenizer
@@ -485,9 +490,11 @@ class ExperimentRunner(object):
         saving all artifacts (including the results of the experiment) in the `data_dir` directory.
 
         Args:
-            num_proc (int, optional): The number of processes to use for parallelization during training. Default = 1
-            batch_size (int, optional): The batch size to use for training. Default = 1
-            block_size (int, optional): The size of blocks to group texts into. Default = 128
+            num_proc (int, optional): The number of processes (CPUs) to use in parallel during processing. Defaults to 1.
+            batch_size (int, optional): The number of samples to be processed together during tokenization,
+                                        and the amount to be processed at once each step of training
+                                        (before updating weights). Defaults to 1.
+            block_size (int, optional): The number of tokens in a single block to be given to the model. Defaults to 128.
         """
 
         self.get_efcamdat_dfs()

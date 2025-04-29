@@ -176,7 +176,6 @@ cython_debug/
 .pypirc
 
 # Corpora and artifacts
-!data/
 data/models/
 data/train_dfs/
 data/original_corpora/cglu/German/*
@@ -187,3 +186,6 @@ data/original_corpora/cglu/Russian/*
 data/original_corpora/cglu/Turkish/*
 data/original_corpora/efcamdat/*
 data/original_corpora/meco/*
+
+# Test files
+test.ipynb

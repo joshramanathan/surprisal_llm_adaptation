@@ -4,3 +4,4 @@ datasets
 openpyxl
 torch
 accelerate
+pyreadr
