@@ -7,6 +7,7 @@ from torch.optim import AdamW
 from datasets import Dataset
 import torch
 import pyreadr
+import gc
 
 from . utilities import CGLU_FILENAMES, assert_file_exists, combine_dfs, group_texts
 
@@ -79,7 +80,8 @@ class ExperimentRunner(object):
             df (pd.DataFrame): The DataFrame containing the data to be processed.
             tokenizer (AutoTokenizer): The tokenizer to use for tokenizing the text responses.
             num_proc (int, optional): The number of processes to use for parallelization. Default = 24
-            batch_size (int, optional): The batch size to use for training. Default = 100
+            batch_size (int, optional): The number of samples to be processed together during tokenization.
+                                        Default = 100
             block_size (int, optional): The size of blocks to group texts into. Default = 2048
         Returns:
             Dataset: A Dataset object containing the tokenized data.
@@ -114,7 +116,7 @@ class ExperimentRunner(object):
                   train_dataset: Dataset,
                   l1: str,
                   output_dir: str,
-                  per_device_train_batch_size: int = 100
+                  per_device_train_batch_size: int = 16
                   ) -> None:
         """
         Adapts a (causal) language model on a specific dialect's Dataset.
@@ -122,7 +124,7 @@ class ExperimentRunner(object):
             train_dataset (Dataset): The dataset to train on.
             l1 (str): The L1 language for which the model is being adapted.
             output_dir (str): Directory path where the new model will be saved.
-            batch_size (int, optional): The batch size to use for training. Default = 100
+            per_device_train_batch_size (int, optional): The batch size to use per GPU. Default = 16
         """
 
         # Constant training parameters
@@ -141,7 +143,8 @@ class ExperimentRunner(object):
                                           )
         
         # Initialize model, optimizer, and trainer
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map="auto")
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map=device)
 
         optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
         num_training_steps = len(train_dataset) * EPOCHS
@@ -168,6 +171,8 @@ class ExperimentRunner(object):
         del model
         del trainer
         del train_dataset
+        torch.cuda.empty_cache()
+        gc.collect()
 
 
     def _calculate_perplexity(self, l1: str, text: str) -> float:
@@ -360,7 +365,7 @@ class ExperimentRunner(object):
     def adapt_models(self,
                      num_proc: int = 24,
                      batch_size: int = 100,
-                     per_device_train_batch_size: int = 100,
+                     per_device_train_batch_size: int = 16,
                      block_size: int = 2048
                      ) -> None:
         """
@@ -376,8 +381,8 @@ class ExperimentRunner(object):
                                       Defaults to 24
             batch_size (int, optional): The number of samples to be processed together during tokenization.
                                         Defaults to 100
-            per_device_train_batch_size (int, optional): The batch size to use for training.
-                                                         Defaults to 100
+            per_device_train_batch_size (int, optional): The batch size to use per GPU.
+                                                         Defaults to 16
             block_size (int, optional): The number of tokens in a single block to be given to the model.
                                         Defaults to 2048
         """
@@ -434,7 +439,7 @@ class ExperimentRunner(object):
     def run_experiment(self,
                        num_proc: int = 24,
                        batch_size: int = 100,
-                       per_device_train_batch_size: int = 100,
+                       per_device_train_batch_size: int = 16,
                        block_size: int = 2048
                        ) -> None:
         """
@@ -447,8 +452,8 @@ class ExperimentRunner(object):
                                       Defaults to 24
             batch_size (int, optional): The number of samples to be processed together during tokenization.
                                         Defaults to 100
-            per_device_train_batch_size (int, optional): The batch size to use for training.
-                                                         Defaults to 100
+            per_device_train_batch_size (int, optional): The batch size to use per GPU.
+                                                         Defaults to 16
             block_size (int, optional): The number of tokens in a single block to be given to the model.
                                         Defaults to 2048
         """

@@ -7,7 +7,7 @@ def main():
     # Run the experiment with specified parameters
     runner.run_experiment(num_proc=24,
                           batch_size=100,
-                          per_device_train_batch_size=100,
+                          per_device_train_batch_size=16,
                           block_size=2048)
 
 if __name__ == "__main__":
