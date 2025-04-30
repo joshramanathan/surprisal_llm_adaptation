@@ -1,7 +1,8 @@
 import os
 import pandas as pd
 from tqdm import tqdm
-from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer
+from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer, get_scheduler
+from torch.optim import AdamW
 from datasets import Dataset
 import torch
 import pyreadr
@@ -14,11 +15,14 @@ class ExperimentRunner(object):
     2. Adapting language models for different L1 backgrounds
     3. Estimating surprisal values
     4. Running regression analyses on reading times
-    The pipeline processes data for 6 L1 languages: German, Italian, Mandarin, Portuguese, Russian, and Turkish.
+    The pipeline processes data for 6 L1 languages:
+    German, Italian, Mandarin, Portuguese, Russian, and Turkish.
+
     Attributes:
         model_id (str): The HuggingFace model ID for the base language model
         data_dir (str): Directory containing input corpora and where outputs will be saved
         l1s (list): List of L1 languages included in the analysis
+
     Methods:
         get_efcamdat_dfs(): Processes EFCAMDAT corpus data
         get_cglu_dfs(): Processes CGLU corpus data
@@ -29,14 +33,15 @@ class ExperimentRunner(object):
         run_experiment(): Executes the complete experimental pipeline
     """
 
-    def __init__(self, model_id: str, data_dir: str = None):
+    def __init__(self, model_id: str = "EleutherAI/pythia-160m-deduped", data_dir: str = None):
         """
         Initializes the ExperimentRunner class.
         Args:
-            model_id (str): The HuggingFace ID of the language model to be used.
+            model_id (str, optional): The HuggingFace ID of the language model to be used. Defaults to
+                                      "EleutherAI/pythia-160m-deduped"
             data_dir (str, optional): The directory where the train and test corpora are located.
-                            This is also where data and model outputs will be saved.
-                            If None, defaults to the "data" directory in the current file's path.
+                                      This is also where data and model outputs will be saved.
+                                      If None, defaults to the "data" directory in the current file's path.
         """
 
         self.model_id = model_id
@@ -64,9 +69,7 @@ class ExperimentRunner(object):
         }
 
         # Minimum word count (for Turkish) to ensure equal amounts of data
-        self._MIN_WORDCOUNT = 126824
-
-        # 
+        # self._MIN_WORDCOUNT = 126824
 
 
     def _assert_file_exists(self, file_path: str, error_message: str):
@@ -97,18 +100,17 @@ class ExperimentRunner(object):
         # Calculate the average wordcount for each source to estimate the number of rows to sample
         avg_wordcount_df1 = df1["wordcount"].mean()
         avg_wordcount_df2 = df2["wordcount"].mean()
-        num_rows_df1 = int(self._MIN_WORDCOUNT / avg_wordcount_df1)
-        num_rows_df2 = int(self._MIN_WORDCOUNT / avg_wordcount_df2)
+        min_wordcount = min(df1["wordcount"].sum(), df2["wordcount"].sum())
+        num_rows_df1 = int(min_wordcount / avg_wordcount_df1)
+        num_rows_df2 = int(min_wordcount / avg_wordcount_df2)
 
         # Ensure that the number of rows to sample is not greater than the available rows
         num_rows_df1 = min(num_rows_df1, len(df1))
         num_rows_df2 = min(num_rows_df2, len(df2))
 
-        # Sample the required number of rows from each DataFrame
+        # Sample the required number of rows from each DataFrame and concatenate them
         df1_sampled = df1.sample(n=num_rows_df1, random_state=123)
         df2_sampled = df2.sample(n=num_rows_df2, random_state=456)
-
-        # Concatenate the sampled DataFrames
         combined_df = pd.concat([df1_sampled, df2_sampled], ignore_index=True)
 
         # Shuffle and return the new DataFrame
@@ -146,18 +148,18 @@ class ExperimentRunner(object):
     def _process_df_for_training(self,
                                  df: pd.DataFrame,
                                  tokenizer: AutoTokenizer,
-                                 num_proc: int = 1,
-                                 batch_size: int = 1,
-                                 block_size: int = 128
+                                 num_proc: int = 24,
+                                 batch_size: int = 100,
+                                 block_size: int = 2048
                                  ) -> Dataset:
         """
         Processes a DataFrame for training by tokenizing the text responses and creating a Dataset.
         Args:
             df (pd.DataFrame): The DataFrame containing the data to be processed.
             tokenizer (AutoTokenizer): The tokenizer to use for tokenizing the text responses.
-            num_proc (int, optional): The number of processes to use for parallelization. Default = 1
-            batch_size (int, optional): The batch size to use for training. Default = 1
-            block_size (int, optional): The size of blocks to group texts into. Default = 128
+            num_proc (int, optional): The number of processes to use for parallelization. Default = 24
+            batch_size (int, optional): The batch size to use for training. Default = 100
+            block_size (int, optional): The size of blocks to group texts into. Default = 2048
         Returns:
             Dataset: A Dataset object containing the tokenized data.
         """
@@ -185,45 +187,66 @@ class ExperimentRunner(object):
         )
 
         return lm_dataset
-    
+
 
     def _train_l1(self,
                   train_dataset: Dataset,
                   l1: str,
                   output_dir: str,
-                  batch_size: int = 1):
+                  per_device_train_batch_size: int = 100
+                  ) -> None:
         """
         Adapts a (causal) language model on a specific dialect's Dataset.
         Args:
             train_dataset (Dataset): The dataset to train on.
             l1 (str): The L1 language for which the model is being adapted.
             output_dir (str): Directory path where the new model will be saved.
-            batch_size (int, optional): The batch size to use for training. Default = 1
+            batch_size (int, optional): The batch size to use for training. Default = 100
         """
+
+        # Constant training parameters
+        EPOCHS = 2
+        LEARNING_RATE = 0.00003
+        WEIGHT_DECAY = 0.01
 
         # Set arguments for training
         training_args = TrainingArguments(output_dir=output_dir,
-                                          num_train_epochs=2,
-                                          per_device_train_batch_size=batch_size,
+                                          num_train_epochs=EPOCHS,
+                                          per_device_train_batch_size=per_device_train_batch_size,
                                           save_strategy="no",
-                                          weight_decay=0.01,  # TODO: change if bad
+                                          weight_decay=WEIGHT_DECAY,
                                           lr_scheduler_type="constant_with_warmup",
-                                          learning_rate=0.00003
+                                          learning_rate=LEARNING_RATE
                                           )
         
-        # Initialize model and trainer
-        model = AutoModelForCausalLM.from_pretrained(self.model_id)
+        # Initialize model, optimizer, and trainer
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map="auto")
+
+        optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
+        num_training_steps = len(train_dataset) * EPOCHS
+
+        scheduler = get_scheduler(
+            "linear",
+            optimizer=optimizer,
+            num_warmup_steps=int(num_training_steps * .10),
+            num_training_steps=num_training_steps
+        )
+
         trainer = Trainer(
             model=model,
             args=training_args,
-            train_dataset=train_dataset
+            train_dataset=train_dataset,
+            optimizers=(optimizer, scheduler)
         )
-
-        # TODO: optimize training
 
         # Train the model and save it
         trainer.train()
         trainer.save_model(os.path.join(output_dir, l1))
+
+        # Free up memory
+        del model
+        del trainer
+        del train_dataset
 
 
     def _calculate_perplexity(self, l1: str, text: str) -> float:
@@ -263,16 +286,8 @@ class ExperimentRunner(object):
         """
         Retrieves and processes EFCAMDAT learner corpus data, splitting it by L1 language.
         This method reads the EFCAMDAT cleaned subcorpus Excel file, processes it by keeping only
-        relevant columns (L1 language, proficiency level, topic, word count, and text response),
-        and splits the data into separate dataframes by L1 language. The resulting dataframes
-        are returned and saved as feather files.
-        Returns:
-            dict: A dictionary containing DataFrames for each L1 language group, with the
-                  following columns:
-                  - level: EF proficiency level
-                  - topic: prompt topic
-                  - wordcount: number of words in response
-                  - text: learner's written response
+        relevant columns, and splits the data into separate dataframes by L1 language.
+        The resulting dataframes are saved as feather files.
         Raises:
             FileNotFoundError: If the EFCAMDAT cleaned subcorpus file or required L1 dataframes
                               are not found in the expected locations.
@@ -317,8 +332,6 @@ class ExperimentRunner(object):
         for l1 in l1_dfs:
             l1_dfs[l1] = l1_dfs[l1].drop(columns=["l1"])
             l1_dfs[l1].to_feather(os.path.join(efcamdat_train_folder, f"{l1}_efcamdat.feather"))
-
-        return l1_dfs
 
 
     def get_cglu_dfs(self) -> None:
@@ -423,7 +436,12 @@ class ExperimentRunner(object):
             combined_df.to_feather(os.path.join(combined_train_folder, f"{l1}_combined.feather"))
 
 
-    def adapt_models(self, num_proc: int = 1, batch_size: int = 1, block_size: int = 128) -> None:
+    def adapt_models(self,
+                     num_proc: int = 24,
+                     batch_size: int = 100,
+                     per_device_train_batch_size: int = 100,
+                     block_size: int = 2048
+                     ) -> None:
         """
         Adapt language models for each L1 in the dataset. For each L1, it:
         1. Loads the corresponding training data
@@ -433,11 +451,14 @@ class ExperimentRunner(object):
         At the end, the adapted models are saved to `models` folder.
 
         Args:
-            num_proc (int, optional): The number of processes (CPUs) to use in parallel during processing. Defaults to 1.
-            batch_size (int, optional): The number of samples to be processed together during tokenization,
-                                        and the amount to be processed at once each step of training
-                                        (before updating weights). Defaults to 1.
-            block_size (int, optional): The number of tokens in a single block to be given to the model. Defaults to 128.
+            num_proc (int, optional): The number of processes (CPUs) to use in parallel during processing.
+                                      Defaults to 24
+            batch_size (int, optional): The number of samples to be processed together during tokenization.
+                                        Defaults to 100
+            per_device_train_batch_size (int, optional): The batch size to use for training.
+                                                         Defaults to 100
+            block_size (int, optional): The number of tokens in a single block to be given to the model.
+                                        Defaults to 2048
         """
 
         # Initialize the tokenizer
@@ -445,11 +466,17 @@ class ExperimentRunner(object):
 
         # Get the input and output directory for the adapted models
         input_dir = os.path.join(self.data_dir, "train_dfs", "combined")
-        output_dir = os.path.join(self.data_dir, "models", "gpt")
+        output_dir = os.path.join(self.data_dir, "models", self.model_id.split("/")[-1])
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        for l1 in tqdm(self.l1s, desc="Adapting models", unit="L1"):
+        for l1 in tqdm(self.l1s, desc="Adapting models", unit="models"):
+
+            # Check if the model has already been adapted
+            adapted_model_path = os.path.join(output_dir, l1)
+            if os.path.exists(adapted_model_path):
+                print(f"{l1} model found. Skipping...")
+                continue
 
             print(f"Adapting {l1} model...")
 
@@ -461,7 +488,7 @@ class ExperimentRunner(object):
             del l1_df
 
             # Train the model and save it to `output_dir`
-            self._train_l1(train_dataset, l1, output_dir, batch_size)
+            self._train_l1(train_dataset, l1, output_dir, per_device_train_batch_size)
 
 
     def get_regression_df(self) -> None:
@@ -483,23 +510,31 @@ class ExperimentRunner(object):
         pass
 
 
-    def run_experiment(self, num_proc: int = 1, batch_size: int = 1, block_size: int = 128) -> None:
+    def run_experiment(self,
+                       num_proc: int = 24,
+                       batch_size: int = 100,
+                       per_device_train_batch_size: int = 100,
+                       block_size: int = 2048
+                       ) -> None:
         """
         Run the entire experiment pipeline automatically: get EFCAMDAT and CGLU dataframes,
         combine them, adapt models, gather data for regression, and fit the regression model,
         saving all artifacts (including the results of the experiment) in the `data_dir` directory.
 
         Args:
-            num_proc (int, optional): The number of processes (CPUs) to use in parallel during processing. Defaults to 1.
-            batch_size (int, optional): The number of samples to be processed together during tokenization,
-                                        and the amount to be processed at once each step of training
-                                        (before updating weights). Defaults to 1.
-            block_size (int, optional): The number of tokens in a single block to be given to the model. Defaults to 128.
+            num_proc (int, optional): The number of processes (CPUs) to use in parallel during processing.
+                                      Defaults to 24
+            batch_size (int, optional): The number of samples to be processed together during tokenization.
+                                        Defaults to 100
+            per_device_train_batch_size (int, optional): The batch size to use for training.
+                                                         Defaults to 100
+            block_size (int, optional): The number of tokens in a single block to be given to the model.
+                                        Defaults to 2048
         """
 
         self.get_efcamdat_dfs()
         self.get_cglu_dfs()
         self.combine_efcamdat_cglu()
-        self.adapt_models(num_proc, batch_size, block_size)
+        self.adapt_models(num_proc, batch_size, per_device_train_batch_size, block_size)
         self.get_regression_df()
         self.fit_regression_model()
