@@ -82,7 +82,8 @@ Directory containing all corpora and generated data. This may be named anything,
 The package directory.
 
 - `__init__.py`
-- `runner.py` – Contains the `ExperimentRunner` class for orchestrating training and evaluation.
+- `runner.py` Contains the `ExperimentRunner` class for orchestrating training and evaluation.
+- `utilities.py` Helper variables and functions.
 
 ---
 
@@ -90,26 +91,28 @@ The package directory.
 
 ## Usage
 
-Once the corpora are organized as described above, you can run the full training and evaluation pipeline:
+Once the corpora are organized as described above, you can run the full training and evaluation pipeline as conducted in the original experiment:
 
 ```bash
 python main.py
 ```
+
 This will create all artifact files and directories entirely within `data`. If you wish to modify the data directory or other parameters, you can adjust the `run_experiment` arguments inside `main.py`.
 
 Alternatively, you can use the package manually:
 ```python
 import surprisal_llm_adaptation
 
-runner = surprisal_llm_adaptation.ExperimentRunner(model_id="EleutherAI/pythia-1.4b")
+runner = surprisal_llm_adaptation.ExperimentRunner(model_id="EleutherAI/pythia-160m-deduped")
 ```
+
 You may replace `model_id` with any HuggingFace model identifier for an autoregressive language model (e.g., GPT-2, Pythia).
 Optionally, you can also specify a different `data_dir` path, but the new `data_dir` must be organized as described in [Directory Structure](#directory-structure).
 
 To begin adaptation and evaluation:
 
 ```python
-runner.full_pipeline()
+runner.run_experiment()
 ```
 
 Or call individual steps separately:
@@ -125,14 +128,12 @@ runner.fit_regression_model()
 
 NOTE: `full_pipeline()` and `adapt_models()` may optionally be passed the following parameters:
 
-- **num_proc** (`int`, _optional_) - The number of processes (CPUs) to use in parallel during processing. Defaults to 1.
-- **batch_size** (`int`, _optional_) - The number of samples to be processed together during tokenization, and the amount to be processed at once each step of training (before updating weights). Defaults to 1.
+- **num_proc** (`int`, _optional_) - The number of processes (CPUs) to use in parallel during processing. Defaults to 24.
+- **batch_size** (`int`, _optional_) - The number of samples to be processed together during tokenization. Defaults to 100.
+- **per_device_train_batch_size** (`int`, _optional_) - The batch size to use for training. Defaults to 100.
 - **block_size** (`int`, _optional_) - The number of tokens in a single block to be given to the model. Defaults to 128.
 
-It is _highly_ recommended to adjust `num_proc` and `batch_size` according to your machine's capabilities.
-The default for both is `1`, which will likely be too slow for most users.
-
-Additionally, changing the `block_size` will change the way the models are trained. Depending on the value, the experiment may result differently.
+It is recommended to adjust `num_proc` and `batch_size` according to your machine's capabilities. However, recreating the exact experiment necessarily requires the default parameters.
 
 ---
 
