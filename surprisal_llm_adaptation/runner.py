@@ -1,11 +1,15 @@
 import os
 import pandas as pd
 from tqdm import tqdm
-from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer, get_scheduler
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import TrainingArguments, Trainer, get_scheduler
 from torch.optim import AdamW
 from datasets import Dataset
 import torch
 import pyreadr
+
+from . utilities import CGLU_FILENAMES, assert_file_exists, combine_dfs, group_texts
+
 
 class ExperimentRunner(object):
     """
@@ -58,91 +62,8 @@ class ExperimentRunner(object):
         self._EFCAMDAT_COLS_OF_INTEREST = ["wordcount", "text", "l1"]
         self._CGLU_COLS_OF_INTEREST = ["N_Words", "Text"]
 
-        # CGLU file names
-        self._CGLU_FILENAMES = {
-            "German": ["europe_west.Germany.eng.clean.OUT.gz"],
-            "Italian": ["europe_west.Italy.eng.clean.OUT.gz"],
-            "Mandarin": ["asia_east.China.eng.clean.OUT.gz", "asia_east.Taiwan.eng.clean.OUT.gz"],
-            "Portuguese": ["america_brazil.Brazil.eng.clean.OUT.gz"],
-            "Russian": ["europe_russia.Russia.eng.1.OUT.gz", "europe_russia.Russia.eng.2.OUT.gz"],
-            "Turkish": ["middle_east.Turkey.eng.clean.original.gz"]
-        }
-
         # Minimum word count (for Turkish) to ensure equal amounts of data
         # self._MIN_WORDCOUNT = 126824
-
-
-    def _assert_file_exists(self, file_path: str, error_message: str):
-        """
-        Asserts that a file exists at the given path. If not, raises a FileNotFoundError with
-        the provided error message.
-        Args:
-            file_path (str): The path to the file to check.
-            error_message (str): The error message to raise if the file does not exist.
-        Raises:
-            FileNotFoundError: If the file does not exist at the given path.
-        """
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(error_message)
-
-
-    def _combine_dfs(self, df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
-        """
-        Combines two DataFrames into a single DataFrame with 
-        approximately equal amounts of `wordcount` of each.
-        Args:
-            df1 (pd.DataFrame): The first DataFrame to combine.
-            df2 (pd.DataFrame): The second DataFrame to combine.
-        Returns:
-            pd.DataFrame: The combined DataFrame with duplicates removed.
-        """
-
-        # Calculate the average wordcount for each source to estimate the number of rows to sample
-        avg_wordcount_df1 = df1["wordcount"].mean()
-        avg_wordcount_df2 = df2["wordcount"].mean()
-        min_wordcount = min(df1["wordcount"].sum(), df2["wordcount"].sum())
-        num_rows_df1 = int(min_wordcount / avg_wordcount_df1)
-        num_rows_df2 = int(min_wordcount / avg_wordcount_df2)
-
-        # Ensure that the number of rows to sample is not greater than the available rows
-        num_rows_df1 = min(num_rows_df1, len(df1))
-        num_rows_df2 = min(num_rows_df2, len(df2))
-
-        # Sample the required number of rows from each DataFrame and concatenate them
-        df1_sampled = df1.sample(n=num_rows_df1, random_state=123)
-        df2_sampled = df2.sample(n=num_rows_df2, random_state=456)
-        combined_df = pd.concat([df1_sampled, df2_sampled], ignore_index=True)
-
-        # Shuffle and return the new DataFrame
-        combined_df = combined_df.sample(frac=1, random_state=789).reset_index(drop=True)
-        return combined_df
-
-
-    def _group_texts(self, examples, block_size: int):
-        """
-        Groups texts into blocks of a specified size.
-        Args:
-            examples (dict): A dictionary containing the texts to be grouped.
-            block_size (int): The size of blocks to group texts into.
-        Returns:
-            dict: A dictionary containing the grouped texts.
-        """
-        # Concatenate all texts
-        concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
-        total_length = len(concatenated_examples["input_ids"])
-        
-        # Calculate the number of full blocks
-        total_length = (total_length // block_size) * block_size
-        
-        # Split the concatenated texts into blocks
-        result = {
-            k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
-            for k, t in concatenated_examples.items()
-        }
-
-        result["labels"] = result["input_ids"].copy()
-        
-        return result
 
 
     def _process_df_for_training(self,
@@ -180,7 +101,7 @@ class ExperimentRunner(object):
 
         # Group the tokenized texts into blocks of the specified size
         lm_dataset = tokenized_dataset.map(
-            lambda x: self._group_texts(x, block_size),
+            lambda x: group_texts(x, block_size),
             batched=True,
             batch_size=batch_size,
             num_proc=num_proc
@@ -205,7 +126,7 @@ class ExperimentRunner(object):
         """
 
         # Constant training parameters
-        EPOCHS = 2
+        EPOCHS = 4
         LEARNING_RATE = 0.00003
         WEIGHT_DECAY = 0.01
 
@@ -297,7 +218,7 @@ class ExperimentRunner(object):
         efcamdat_train_folder = os.path.join(self.data_dir, "train_dfs", "efcamdat")
         if os.path.exists(efcamdat_train_folder):
             for l1 in self.l1s:
-                self._assert_file_exists(os.path.join(efcamdat_train_folder, f"{l1}_efcamdat.feather"), 
+                assert_file_exists(os.path.join(efcamdat_train_folder, f"{l1}_efcamdat.feather"), 
                                          f"{l1} dataframe not found. " 
                                          f"Please remove conflicting folder {efcamdat_train_folder} and rerun.")
             return {l1: pd.read_feather(os.path.join(efcamdat_train_folder, f"{l1}_efcamdat.feather")) for l1 in self.l1s}
@@ -305,7 +226,7 @@ class ExperimentRunner(object):
         # Check if the EFCAMDAT cleaned subcorpus exists, and read it into a DataFrame
         efcamdat_filename = "Final database (alternative prompts).xlsx"
         efcamdat_path = os.path.join(self.data_dir, "original_corpora", "efcamdat", efcamdat_filename)
-        self._assert_file_exists(efcamdat_path,
+        assert_file_exists(efcamdat_path,
                                 f"Error: file {efcamdat_path} not found. "
                                 "Please download the EFCAMDAT cleaned subcorpus from "
                                 "https://ef-lab.mmll.cam.ac.uk/EFCAMDAT.html")
@@ -347,7 +268,7 @@ class ExperimentRunner(object):
         cglu_train_folder = os.path.join(self.data_dir, "train_dfs", "cglu")
         if os.path.exists(cglu_train_folder):
             for l1 in self.l1s:
-                self._assert_file_exists(os.path.join(cglu_train_folder, f"{l1}_cglu.feather"), 
+                assert_file_exists(os.path.join(cglu_train_folder, f"{l1}_cglu.feather"), 
                                          f"{l1} dataframe not found. " 
                                          f"Please remove conflicting folder {cglu_train_folder} and rerun.")
             return {l1: pd.read_feather(os.path.join(cglu_train_folder, f"{l1}_cglu.feather")) for l1 in self.l1s}
@@ -357,9 +278,9 @@ class ExperimentRunner(object):
         for l1 in self.l1s:
             
             # Check if the CGLU data exists
-            l1_cglu_paths = [os.path.join(cglu_dir_path, l1, filename) for filename in self._CGLU_FILENAMES[l1]]
+            l1_cglu_paths = [os.path.join(cglu_dir_path, l1, filename) for filename in CGLU_FILENAMES[l1]]
             for path in l1_cglu_paths:
-                self._assert_file_exists(path,
+                assert_file_exists(path,
                                           f"Error: file {path} not found. "
                                           "Please download the CGLU data from "
                                           "https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/")
@@ -398,7 +319,7 @@ class ExperimentRunner(object):
         combined_train_folder = os.path.join(self.data_dir, "train_dfs", "combined")
         if os.path.exists(combined_train_folder):
             for l1 in self.l1s:
-                self._assert_file_exists(os.path.join(combined_train_folder, f"{l1}_combined.feather"), 
+                assert_file_exists(os.path.join(combined_train_folder, f"{l1}_combined.feather"), 
                                          f"{l1} dataframe not found. " 
                                          f"Please remove conflicting folder {combined_train_folder} and rerun.")
             print("All training data already exists. Skipping combination step.")
@@ -413,10 +334,10 @@ class ExperimentRunner(object):
             # Check if the EFCAMDAT and CGLU data exist
             efcamdat_path = os.path.join(efcamdat_train_folder, f"{l1}_efcamdat.feather")
             cglu_path = os.path.join(cglu_train_folder, f"{l1}_cglu.feather")
-            self._assert_file_exists(efcamdat_path,
+            assert_file_exists(efcamdat_path,
                                       f"Error: file {efcamdat_path} not found. "
                                       "Please run get_efcamdat_dfs() first.")
-            self._assert_file_exists(cglu_path,
+            assert_file_exists(cglu_path,
                                       f"Error: file {cglu_path} not found. "
                                       "Please run get_cglu_dfs() first.")
             
@@ -425,7 +346,7 @@ class ExperimentRunner(object):
             cglu_df = pd.read_feather(cglu_path)
 
             # Combine the two DataFrames
-            combined_df = self._combine_dfs(efcamdat_df, cglu_df)
+            combined_df = combine_dfs(efcamdat_df, cglu_df)
             del efcamdat_df, cglu_df
 
             # Make folder for L1 dataframes
