@@ -38,12 +38,12 @@ class ExperimentRunner(object):
         run_experiment(): Executes the complete experimental pipeline
     """
 
-    def __init__(self, model_id: str = "EleutherAI/pythia-160m-deduped", data_dir: str = None):
+    def __init__(self, model_id: str = "EleutherAI/pythia-410m-deduped", data_dir: str = None):
         """
         Initializes the ExperimentRunner class.
         Args:
             model_id (str, optional): The HuggingFace ID of the language model to be used. Defaults to
-                                      "EleutherAI/pythia-160m-deduped"
+                                      "EleutherAI/pythia-410m-deduped"
             data_dir (str, optional): The directory where the train and test corpora are located.
                                       This is also where data and model outputs will be saved.
                                       If None, defaults to the "data" directory in the current file's path.
@@ -66,6 +66,25 @@ class ExperimentRunner(object):
         # Minimum word count (for Turkish) to ensure equal amounts of data
         # self._MIN_WORDCOUNT = 126824
 
+
+    def _all_train_data_exists(self) -> bool:
+        """
+        Checks if all combined dfs already exist.
+        Returns:
+            bool: True if all training data exists, False otherwise.
+        Raises:
+            FileNotFoundError: If the combined training data folder exists but a dataframe is missing.
+        """
+        combined_train_folder = os.path.join(self.data_dir, "train_dfs", "combined")
+
+        if os.path.exists(combined_train_folder):
+            for l1 in self.l1s:
+                assert_file_exists(os.path.join(combined_train_folder, f"{l1}_combined.feather"), 
+                                         f"{l1} dataframe not found. " 
+                                         f"Please remove conflicting folder {combined_train_folder} and rerun.")
+            return True
+
+        return False
 
     def _process_df_for_training(self,
                                  df: pd.DataFrame,
@@ -208,7 +227,7 @@ class ExperimentRunner(object):
     # ========================================================================================= #
 
 
-    def get_efcamdat_dfs(self) -> dict:
+    def get_efcamdat_dfs(self) -> None:
         """
         Retrieves and processes EFCAMDAT learner corpus data, splitting it by L1 language.
         This method reads the EFCAMDAT cleaned subcorpus Excel file, processes it by keeping only
@@ -219,14 +238,14 @@ class ExperimentRunner(object):
                               are not found in the expected locations.
         """
 
-        # Check if all necessary data already exists and if so, return it
+        # Check if all necessary data already exists
         efcamdat_train_folder = os.path.join(self.data_dir, "train_dfs", "efcamdat")
         if os.path.exists(efcamdat_train_folder):
             for l1 in self.l1s:
                 assert_file_exists(os.path.join(efcamdat_train_folder, f"{l1}_efcamdat.feather"), 
                                          f"{l1} dataframe not found. " 
                                          f"Please remove conflicting folder {efcamdat_train_folder} and rerun.")
-            return {l1: pd.read_feather(os.path.join(efcamdat_train_folder, f"{l1}_efcamdat.feather")) for l1 in self.l1s}
+            return
 
         # Check if the EFCAMDAT cleaned subcorpus exists, and read it into a DataFrame
         efcamdat_filename = "Final database (alternative prompts).xlsx"
@@ -269,14 +288,14 @@ class ExperimentRunner(object):
                                are not found in the expected locations.
         """
 
-        # Check if all necessary data already exists and if so, return it
+        # Check if all necessary data already exists
         cglu_train_folder = os.path.join(self.data_dir, "train_dfs", "cglu")
         if os.path.exists(cglu_train_folder):
             for l1 in self.l1s:
                 assert_file_exists(os.path.join(cglu_train_folder, f"{l1}_cglu.feather"), 
                                          f"{l1} dataframe not found. " 
                                          f"Please remove conflicting folder {cglu_train_folder} and rerun.")
-            return {l1: pd.read_feather(os.path.join(cglu_train_folder, f"{l1}_cglu.feather")) for l1 in self.l1s}
+            return
         
         # For each L1, check if the CGLU data exists, and read and save it
         cglu_dir_path = os.path.join(self.data_dir, "original_corpora", "cglu")
@@ -320,16 +339,13 @@ class ExperimentRunner(object):
                 with existing combined data files.
         """
 
-        # Check if all necessary data already exists and if so, return it
+        # Check if all necessary data already exists
         combined_train_folder = os.path.join(self.data_dir, "train_dfs", "combined")
-        if os.path.exists(combined_train_folder):
-            for l1 in self.l1s:
-                assert_file_exists(os.path.join(combined_train_folder, f"{l1}_combined.feather"), 
-                                         f"{l1} dataframe not found. " 
-                                         f"Please remove conflicting folder {combined_train_folder} and rerun.")
-            print("All training data already exists. Skipping combination step.")
+        if self._all_train_data_exists():
+            print("All combined data already exists. Skipping combination step.")
             return
-        
+
+
         # For each L1, check if the EFCAMDAT and CGLU data exists, and read and save it
         efcamdat_train_folder = os.path.join(self.data_dir, "train_dfs", "efcamdat")
         cglu_train_folder = os.path.join(self.data_dir, "train_dfs", "cglu")
@@ -404,7 +420,7 @@ class ExperimentRunner(object):
                 print(f"{l1} model found. Skipping...")
                 continue
 
-            print(f"Adapting {l1} model...")
+            print(f"\nAdapting {l1} model...")
 
             # Load the data for the current L1
             l1_df = pd.read_feather(os.path.join(input_dir, f"{l1}_combined.feather"))
@@ -458,9 +474,14 @@ class ExperimentRunner(object):
                                         Defaults to 2048
         """
 
-        self.get_efcamdat_dfs()
-        self.get_cglu_dfs()
-        self.combine_efcamdat_cglu()
+        if self._all_train_data_exists():
+            print("All training data already exists. Skipping data collection.")
+        else:
+            print("Collecting training data...")
+            self.get_efcamdat_dfs()
+            self.get_cglu_dfs()
+            self.combine_efcamdat_cglu()
+
         self.adapt_models(num_proc, batch_size, per_device_train_batch_size, block_size)
         self.get_regression_df()
         self.fit_regression_model()

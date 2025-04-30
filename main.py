@@ -2,7 +2,7 @@ import surprisal_llm_adaptation
 
 def main():
     # Initialize the experiment runner with the specified model ID
-    runner = surprisal_llm_adaptation.ExperimentRunner(model_id="EleutherAI/pythia-160m-deduped")
+    runner = surprisal_llm_adaptation.ExperimentRunner(model_id="EleutherAI/pythia-410m-deduped")
     
     # Run the experiment with specified parameters
     runner.run_experiment(num_proc=24,
