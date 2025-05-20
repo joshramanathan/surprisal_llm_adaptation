@@ -178,6 +178,9 @@ cython_debug/
 # Corpora and artifacts
 data/models/
 data/train_dfs/
+data/test_dfs/
+data/temp_cache/
+data/results/
 data/original_corpora/cglu/German/*
 data/original_corpora/cglu/Italian/*
 data/original_corpora/cglu/Mandarin/*
@@ -189,3 +192,5 @@ data/original_corpora/meco/*
 
 # Test files
 test.ipynb
+test.py
+texts.csv

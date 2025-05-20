@@ -4,11 +4,11 @@ import pandas as pd
 # This is a dictionary of names of applicable CGLU files for each language.
 # The keys are the language names, and the values are lists of filenames.
 CGLU_FILENAMES = {
-    "German": ["europe_west.Germany.eng.clean.OUT.gz"],
-    "Italian": ["europe_west.Italy.eng.clean.OUT.gz"],
-    "Mandarin": ["asia_east.China.eng.clean.OUT.gz", "asia_east.Taiwan.eng.clean.OUT.gz"],
-    "Portuguese": ["america_brazil.Brazil.eng.clean.OUT.gz"],
-    "Russian": ["europe_russia.Russia.eng.1.OUT.gz", "europe_russia.Russia.eng.2.OUT.gz"],
+    "German": ["europe_west.Germany.eng.clean.IN.gz"],
+    "Italian": ["europe_west.Italy.eng.clean.IN.gz"],
+    "Mandarin": ["asia_east.Taiwan.eng.clean.IN.gz"],
+    "Portuguese": ["america_brazil.Brazil.eng.clean.IN.gz"],
+    "Russian": ["europe_russia.Russia.eng.1.IN.gz"],
     "Turkish": ["middle_east.Turkey.eng.clean.original.gz"]
 }
 

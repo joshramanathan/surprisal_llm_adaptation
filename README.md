@@ -44,12 +44,12 @@ Some corpora used for model adaptation are not included in this repository due t
     - Place this file in the data directory in `data/original_corpora/efcamdat`.
 - **CGLU**: The Corpus of Global Language Use (CGLU) v5.2 is available [here](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/).
     - The entire corpus is not necessary; you must only download the following files and place them into their respective folders in the `data/original_corpora/cglu` directory without changing the file names.
-        - Germany: [1](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/europe_west/Germany/eng/europe_west.Germany.eng.clean.OUT.gz)
-        - Italy: [1](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/europe_west/Italy/eng/europe_west.Italy.eng.clean.OUT.gz)
-        - Brazil: [1](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/america_brazil/Brazil/eng/america_brazil.Brazil.eng.clean.OUT.gz)
-        - China/Taiwan [1](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/asia_east/China/eng/asia_east.China.eng.clean.OUT.gz), [2](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/asia_east/Taiwan/eng/asia_east.Taiwan.eng.clean.OUT.gz)
-        - Russia [1](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/europe_russia/Russia/eng/europe_russia.Russia.eng.1.OUT.gz), [2](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/europe_russia/Russia/eng/europe_russia.Russia.eng.2.OUT.gz)
-        - Turkey [1](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/middle_east/Turkey/eng/middle_east.Turkey.eng.clean.original.gz)
+        - [German](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/europe_west/Germany/eng/europe_west.Germany.eng.clean.IN.gz)
+        - [Italian](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/europe_west/Italy/eng/europe_west.Italy.eng.clean.IN.gz)
+        - [Portuguese](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/america_brazil/Brazil/eng/america_brazil.Brazil.eng.clean.IN.gz)
+        - [Mandarin](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/asia_east/Taiwan/eng/asia_east.Taiwan.eng.clean.IN.gz)
+        - [Russian](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/europe_russia/Russia/eng/europe_russia.Russia.eng.1.IN.gz)
+        - [Turkish](https://publicdata.canterbury.ac.nz/Research/Geocorpus/CGLU_v5.2/middle_east/Turkey/eng/middle_east.Turkey.eng.clean.original.gz)
 
 - **MECO**: The Multilingual Eye-movement Corpus (L2 release 2.0) is available [here](https://osf.io/q9h43/).
     - Download the entire `release 2.0` folder and place it in `data/original_corpora/meco/`.
@@ -83,6 +83,7 @@ The package directory.
 
 - `__init__.py`
 - `runner.py` Contains the `ExperimentRunner` class for orchestrating training and evaluation.
+- `surprisal_calc.py` Contains the `SurprisalCalculator` class
 - `utilities.py` Helper variables and functions.
 
 ---
@@ -122,16 +123,21 @@ runner.get_efcamdat_dfs()
 runner.get_cglu_dfs()
 runner.combine_efcamdat_cglu()
 runner.adapt_models()
-runner.get_regression_df()
-runner.fit_regression_model()
+runner.evaluate_model_production()
+runner.evaluate_model_representation()
+runner.get_meco_dfs()
+runner.get_regression_dfs()
+runner.fit_regression_models()
+runner.graph_perplexities()
+runner.graph_dlls()
 ```
 
 NOTE: `full_pipeline()` and `adapt_models()` may optionally be passed the following parameters:
 
 - **num_proc** (`int`, _optional_) - The number of processes (CPUs) to use in parallel during processing. Defaults to 24.
 - **batch_size** (`int`, _optional_) - The number of samples to be processed together during tokenization. Defaults to 100.
-- **per_device_train_batch_size** (`int`, _optional_) - The batch size to use for training. Defaults to 100.
-- **block_size** (`int`, _optional_) - The number of tokens in a single block to be given to the model. Defaults to 128.
+- **per_device_train_batch_size** (`int`, _optional_) - The batch size to use per GPU. Defaults to 16.
+- **block_size** (`int`, _optional_) - The number of tokens in a single block to be given to the model. Defaults to 2048.
 
 It is recommended to adjust `num_proc` and `batch_size` according to your machine's capabilities. However, recreating the exact experiment necessarily requires the default parameters.
 

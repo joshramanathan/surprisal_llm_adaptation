@@ -1,7 +1,13 @@
 pandas
 transformers
+scikit-learn
 datasets
 openpyxl
 torch
 accelerate
-pyreadr
+rdata
+wordfreq
+minicons
+statsmodels
+matplotlib
+seaborn
